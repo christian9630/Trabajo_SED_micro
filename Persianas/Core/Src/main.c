@@ -52,7 +52,39 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int debouncer(volatile int* button_int, GPIO_TypeDef* GPIO_Port, uint16_t GPIO_number)
 
+{
+
+	static uint8_t button_count = 0;
+	static int counter = 0;
+
+	if (*button_int == 1)
+	{
+		if (button_count == 0)
+		{
+			counter = HAL_GetTick();
+			button_count ++;
+		}
+		if (HAL_GetTick() - counter >= 20)
+		{
+			counter = HAL_GetTick();
+			if (HAL_GPIO_ReadPin(GPIO_Port, GPIO_number) != 1)
+			{
+				button_count = 1;
+			}
+			else
+				button_count ++;
+			if (button_count == 4) //Periodo antirrebotes de 4
+			{
+				button_count = 0;
+				*button_int = 0;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
 /* USER CODE END 0 */
 
 /**
