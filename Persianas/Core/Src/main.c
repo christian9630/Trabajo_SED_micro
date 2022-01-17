@@ -26,6 +26,7 @@ volatile int abajo = 0; // Persiana bajada
 volatile int subir = 0; // Persiana subiendo
 volatile int bajar = 0; // Persiana bajando
 volatile int modo = 0; // Modo manual(0) automático(1)
+volatile int cmodo = 0; // Entero que nos indicará si el usuario ha pulsado 1 o más veces el botón
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -89,7 +90,8 @@ int debouncer(volatile int* button_int, GPIO_TypeDef* GPIO_Port, uint16_t GPIO_n
 	}
 	return 0;
 }
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+
+/*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	static int countermode = HAL_GetTick();
 	if (GPIO_Pin==GPIO_PIN_0)
@@ -97,6 +99,29 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		if (HAL_GetTick - countermode > 1000)
 		{
 
+			if(abajo == 1) // Si la persiana está bajada, la subiremos
+				subir = 1;
+			if(arriba == 1) // Si la persiana está subida, la subimos
+				bajar = 1;
+		}
+		else
+		{
+			if(modo == 0)
+				modo = 1;
+			if (modo == 1)
+				modo = 0;
+		}
+	}
+}*/
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (GPIO_Pin == GPIO_PIN_0)
+	{
+		cmodo++;
+		HAL_Delay(1000);
+
+		if (cmodo == 1)
+		{
 			if(abajo == 1) // Si la persiana está bajada, la subiremos
 				subir = 1;
 			if(arriba == 1) // Si la persiana está subida, la subimos
