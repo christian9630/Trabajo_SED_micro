@@ -135,6 +135,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 				modo = 0;
 		}
 	}
+	cmodo = 0;
 }
 /* USER CODE END 0 */
 
