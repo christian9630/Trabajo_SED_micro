@@ -244,6 +244,29 @@ void step_motor_angle (float angle, int direction, int rpm) {
 	}
 }
 
+int hall () {
+	HAL_ADC_Start(&hadc2);
+		if(HAL_ADC_PollForConversion(&hadc2, 100) ==  HAL_OK) {
+			ADC_val[1] = HAL_ADC_GetValue(&hadc2);
+		}
+		HAL_ADC_Stop(&hadc2);
+		if(ADC_val[1] < 510) {return 1;}
+		else {return 0;}
+}
+
+uint32_t ultrasonicRead (void) {
+	int cuenta = 0;
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
+	delay_us(10);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
+	while(!(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_4)));
+	while(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_4)) {
+		cuenta = cuenta + 1;
+		delay_us(1);
+	}
+	return cuenta * 0.051;
+}
+
 
 /* USER CODE END 0 */
 
@@ -303,8 +326,14 @@ HAL_TIM_Base_Start(&htim3);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 		  	  //
-		  if(joystick_arriba()) { step_motor_angle(1,1,5); }
-		  if(joystick_abajo()) { step_motor_angle(1,0,5); }
+		  aux = ultrasonicRead();
+		  HAL_Delay(500);
+
+		  if (hall()) {if(joystick_abajo()) { step_motor_angle(1,0,5); }}
+		  else {
+			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
+			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
+		  }
 		  break;
 	  	  case 1:
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
@@ -598,6 +627,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
