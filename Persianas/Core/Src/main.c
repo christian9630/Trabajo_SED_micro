@@ -54,6 +54,7 @@ ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
 
@@ -66,6 +67,7 @@ static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_TIM8_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -78,9 +80,9 @@ static void MX_TIM3_Init(void);
 volatile int button_1 = 0; // bandera para interrupcion
 
 uint32_t ADC_val[3];
+uint32_t distancia = 0;
 
 uint8_t estado = 0;
-int aux = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -246,12 +248,12 @@ void step_motor_angle (float angle, int direction, int rpm) {
 
 int hall () {
 	HAL_ADC_Start(&hadc2);
-		if(HAL_ADC_PollForConversion(&hadc2, 100) ==  HAL_OK) {
-			ADC_val[1] = HAL_ADC_GetValue(&hadc2);
-		}
-		HAL_ADC_Stop(&hadc2);
-		if(ADC_val[1] < 510) {return 1;}
-		else {return 0;}
+	if(HAL_ADC_PollForConversion(&hadc2, 100) ==  HAL_OK) {
+		ADC_val[1] = HAL_ADC_GetValue(&hadc2);
+	}
+	HAL_ADC_Stop(&hadc2);
+	if(ADC_val[1] < 510) {return 1;}
+	else {return 0;}
 }
 
 uint32_t ultrasonicRead (void) {
@@ -265,6 +267,15 @@ uint32_t ultrasonicRead (void) {
 		delay_us(1);
 	}
 	return cuenta * 0.051;
+}
+
+uint32_t ldr () {
+	HAL_ADC_Start(&hadc3);
+	if(HAL_ADC_PollForConversion(&hadc3, 100) ==  HAL_OK) {
+		ADC_val[2] = HAL_ADC_GetValue(&hadc3);
+	}
+	HAL_ADC_Stop(&hadc3);
+	return ADC_val[2];
 }
 
 
@@ -302,8 +313,10 @@ int main(void)
   MX_ADC2_Init();
   MX_ADC3_Init();
   MX_TIM3_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
 HAL_TIM_Base_Start(&htim3);
+HAL_TIM_Base_Start(&htim8);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -320,31 +333,94 @@ HAL_TIM_Base_Start(&htim3);
 	  }
 
 	  switch(estado) {
-	  	  case 0:
+	  	  case 0: // modo manual
 	  		  //mostramos el estado en el que estamos
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 1);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 		  	  //
-		  aux = ultrasonicRead();
-		  HAL_Delay(500);
-
-		  if (hall()) {if(joystick_abajo()) { step_motor_angle(1,0,5); }}
+		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+			  }
 		  else {
+			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+		  }
+
+		  if(distancia > 3 && distancia < 11) {
+			  //obstaculo
+		  }
+		  else if (distancia == 3){
+			  //solo se permite subir
 			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
-			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
+		  }
+		  else if (distancia == 11) {
+			  // funcionamiento normal
+			  if (hall()) {if(joystick_abajo()) { step_motor_angle(1,0,5); }}
+			 		  else {
+			 			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
+			 			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
+			 		  }
 		  }
 		  break;
-	  	  case 1:
+
+
+	  	  case 1: // modo automatico 1: "invierno / intimidad"
+	  		  // mostramos el estado en el que estamos
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 1);
 	 	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+
+	 	  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	  }
+	 	  else {
+	 		  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+	 		  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	 	  }
+
+	 	  if (ldr()>1000 && distancia > 3) {
+	 		 if(distancia > 3 && distancia < 11) {
+	 			 //obstaculo
+	 		 }
+	 		 else {
+	 			 step_motor_angle(1,0,5); //bajando
+	 		 }
+	 	  }
+	 	  else if (ldr()<1000 && hall()==0) {
+	 			 step_motor_angle(1,1,5); //subiendo
+	 	  }
 	 	  break;
-	  	  case 2:
+
+
+
+	  	  case 2:  // modo automatico 2: "verano / inverso"
+	  		  // mostramos el estado en el que estamos
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 1);
-	 	  break;
+
+	 	 if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	 }
+	 	 else {
+	 		 __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+	 		 distancia = ultrasonicRead(); // ahora si, leemos distancia
+	 	 }
+
+	 	 if (ldr()<800 && distancia > 3) {
+	 		 if(distancia > 3 && distancia < 11) {
+	 			 //obstaculo
+	 		 }
+	 		 else {
+	 			 step_motor_angle(1,0,5); // bajando
+	 		 }
+	 	 }
+	 	 else if (ldr()>800 && hall()==0) {
+	 		 			 step_motor_angle(1,1,5); // subiendo
+	 	 }
+	 	 break;
+
+
+
+
 	  	  default:
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
@@ -592,6 +668,52 @@ static void MX_TIM3_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM8 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM8_Init(void)
+{
+
+  /* USER CODE BEGIN TIM8_Init 0 */
+
+  /* USER CODE END TIM8_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM8_Init 1 */
+
+  /* USER CODE END TIM8_Init 1 */
+  htim8.Instance = TIM8;
+  htim8.Init.Prescaler = 40000-1;
+  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim8.Init.Period = 0xffff-1;
+  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim8.Init.RepetitionCounter = 0;
+  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM8_Init 2 */
+
+  /* USER CODE END TIM8_Init 2 */
 
 }
 
