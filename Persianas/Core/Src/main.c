@@ -89,30 +89,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if (GPIO_Pin == GPIO_PIN_1) {
 		button_1 = 1;
 	}
-
-	///////////////////////////////////////////// ANTERIOR CALLBACK
-	/*if (GPIO_Pin == GPIO_PIN_0)
-	{
-		cmodo++;
-		HAL_Delay(1000);
-
-		if (cmodo == 1)
-		{
-			if(bajada == 1) // Si la persiana está bajada, la subiremos
-				subir = 1;
-			if(subida == 1) // Si la persiana está subida, la subimos
-				bajar = 1;
-		}
-		else
-		{
-			if(modo == 0)
-				modo = 1;
-			if (modo == 1)
-				modo = 0;
-		}
-	}
-	cmodo = 0;*/
-	////////////////////////////////////////////////////////////////
 }
 
 
@@ -278,6 +254,11 @@ uint32_t ldr () {
 	return ADC_val[2];
 }
 
+void motion () {
+	 if(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3)) {  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, 1); }
+	 else {  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, 0); }
+}
+
 
 /* USER CODE END 0 */
 
@@ -332,6 +313,8 @@ HAL_TIM_Base_Start(&htim8);
 		  button_1 = 0;
 	  }
 
+	  motion();
+
 	  switch(estado) {
 	  	  case 0: // modo manual
 	  		  //mostramos el estado en el que estamos
@@ -339,7 +322,7 @@ HAL_TIM_Base_Start(&htim8);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 		  	  //
-		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+		/*  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 			  }
 		  else {
 			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -360,7 +343,7 @@ HAL_TIM_Base_Start(&htim8);
 			 			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
 			 			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
 			 		  }
-		  }
+		  }*/
 		  break;
 
 
@@ -370,7 +353,7 @@ HAL_TIM_Base_Start(&htim8);
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 1);
 	 	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 
-	 	  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	 /* if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 	 	  }
 	 	  else {
 	 		  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -387,7 +370,7 @@ HAL_TIM_Base_Start(&htim8);
 	 	  }
 	 	  else if (ldr()<1000 && hall()==0) {
 	 			 step_motor_angle(1,1,5); //subiendo
-	 	  }
+	 	  }*/
 	 	  break;
 
 
@@ -398,7 +381,7 @@ HAL_TIM_Base_Start(&htim8);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 1);
 
-	 	 if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	/* if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 	 	 }
 	 	 else {
 	 		 __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -415,7 +398,7 @@ HAL_TIM_Base_Start(&htim8);
 	 	 }
 	 	 else if (ldr()>800 && hall()==0) {
 	 		 			 step_motor_angle(1,1,5); // subiendo
-	 	 }
+	 	 }*/
 	 	 break;
 
 
@@ -734,12 +717,15 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
-                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
+                          |GPIO_PIN_0, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PD8 PD9 PD10 PD11
-                           PD12 PD13 PD14 PD15 */
+                           PD12 PD13 PD14 PD15
+                           PD0 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
-                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
+                          |GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -751,8 +737,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PD4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  /*Configure GPIO pins : PD3 PD4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
