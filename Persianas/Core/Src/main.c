@@ -78,16 +78,25 @@ static void MX_TIM8_Init(void);
 #define pasosporrev 4096 // para el motor
 
 volatile int button_1 = 0; // bandera para interrupcion
+volatile int button_2 = 0;
 
 uint32_t ADC_val[3];
 uint32_t distancia = 0;
 
+char aux; //char borrar;
+char key [4] = {0,0,0,0};
+
 uint8_t estado = 0;
+uint8_t preestado = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	if (GPIO_Pin == GPIO_PIN_1) {
 		button_1 = 1;
+	}
+
+	if(GPIO_Pin ==  GPIO_PIN_2) {
+		button_2 = 1;
 	}
 }
 
@@ -259,6 +268,95 @@ void motion () {
 	 else {  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, 0); }
 }
 
+char keypad (void)
+{
+	/* Make ROW 1 LOW and all other ROWs HIGH */
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_SET);  //Pull the R1 low
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);  // Pull the R2 High
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);  // Pull the R3 High
+	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
+
+	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+	{
+		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+		return '1';
+	}
+
+	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+	{
+		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+		return '2';
+	}
+
+	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+	{
+		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+		return '3';
+	}
+
+	/* Make ROW 2 LOW and all other ROWs HIGH */
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_RESET);  //Pull the R1 low
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_SET);  // Pull the R2 High
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);  // Pull the R3 High
+	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
+
+	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+		{
+			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+			return '4';
+		}
+
+		if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+		{
+			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+			return '5';
+		}
+
+		if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+		{
+			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+			return '6';
+		}
+
+	/*if (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)))   // if the Col 4 is low
+	{
+		while (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)));   // wait till the button is pressed
+		return 'B';
+	}*/
+
+
+	/* Make ROW 3 LOW and all other ROWs HIGH */
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_RESET);  //Pull the R1 low
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);  // Pull the R2 High
+	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_SET);  // Pull the R3 High
+	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
+
+	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+			{
+				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+				return '7';
+			}
+
+			if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+			{
+				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+				return '8';
+			}
+
+			if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+			{
+				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+				return '9';
+			}
+
+	/*if (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)))   // if the Col 4 is low
+	{
+		while (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)));   // wait till the button is pressed
+		return 'C';
+	}*/
+	return 'x';
+}
+
 
 /* USER CODE END 0 */
 
@@ -309,9 +407,17 @@ HAL_TIM_Base_Start(&htim8);
     /* USER CODE BEGIN 3 */
 	  if(debouncer(&button_1, GPIOD, GPIO_PIN_1) == 1) {
 		  estado ++;
-		  if (estado == 3) {estado = 0;}
+		  if (estado >= 3) {estado = 0;}
 		  button_1 = 0;
 	  }
+
+	  if(debouncer(&button_2, GPIOD, GPIO_PIN_2) == 1) {
+		  	  preestado = estado;
+		  	  estado = 3;
+		  	  __HAL_TIM_SET_COUNTER(&htim8, 0);
+	  		  button_2 = 0;
+	  	  }
+
 
 	  motion();
 
@@ -322,7 +428,7 @@ HAL_TIM_Base_Start(&htim8);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 		  	  //
-		/*  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 			  }
 		  else {
 			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -343,7 +449,7 @@ HAL_TIM_Base_Start(&htim8);
 			 			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
 			 			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
 			 		  }
-		  }*/
+		  }
 		  break;
 
 
@@ -353,7 +459,7 @@ HAL_TIM_Base_Start(&htim8);
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 1);
 	 	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
 
-	 	 /* if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 	 	  }
 	 	  else {
 	 		  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -370,7 +476,7 @@ HAL_TIM_Base_Start(&htim8);
 	 	  }
 	 	  else if (ldr()<1000 && hall()==0) {
 	 			 step_motor_angle(1,1,5); //subiendo
-	 	  }*/
+	 	  }
 	 	  break;
 
 
@@ -381,7 +487,7 @@ HAL_TIM_Base_Start(&htim8);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 1);
 
-	 	/* if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	 	 if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
 	 	 }
 	 	 else {
 	 		 __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
@@ -398,17 +504,42 @@ HAL_TIM_Base_Start(&htim8);
 	 	 }
 	 	 else if (ldr()>800 && hall()==0) {
 	 		 			 step_motor_angle(1,1,5); // subiendo
-	 	 }*/
+	 	 }
 	 	 break;
 
 
 
 
-	  	  default:
+	  	  case 3: // caja fuerte?
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
 	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+
+	      aux = keypad();
+	      	  	  	  	  // if (aux != 'x') { borrar = aux; }
+	      if (aux == '1') { key[0] = aux; }
+	      if (aux == '5' && key[0] == '1') { key[1] = aux; }
+	      if (aux == '2' && key[1] == '5') { key[2] = aux; }
+	      if (aux == '1' && key[2] == '2') {
+	    	  key[3] = aux;
+	    	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
+	    	  __HAL_TIM_SET_COUNTER(&htim8, 0);
+	      }
+
+	      if(__HAL_TIM_GET_COUNTER(&htim8)>=8000) {
+	    		  estado = preestado;
+	    		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
+	    		  key[0] = 0; key[1] = 0; key[2] = 0; key[3] = 0;
+	      }
+
 	  	  break;
+
+	  	  default:
+	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
+	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
+	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+	      break;
+
 
 	  }
   }
@@ -718,23 +849,35 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
                           |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
-                          |GPIO_PIN_0, GPIO_PIN_RESET);
+                          |GPIO_PIN_0|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PD8 PD9 PD10 PD11
                            PD12 PD13 PD14 PD15
-                           PD0 */
+                           PD0 PD5 PD6 PD7 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
                           |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
-                          |GPIO_PIN_0;
+                          |GPIO_PIN_0|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : PA9 PA10 PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /*Configure GPIO pin : PD1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD3 PD4 */
@@ -746,6 +889,9 @@ static void MX_GPIO_Init(void)
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
 }
 
