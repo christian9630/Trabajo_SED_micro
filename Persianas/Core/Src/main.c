@@ -22,16 +22,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-
-////////////////////////////////////USADAS PARA CALLBACK ANTERIOR////////////////
-/*volatile int subida = 1; // Persiana subida
-volatile int bajada = 0; // Persiana bajada
-volatile int subir = 0; // Persiana subiendo
-volatile int bajar = 0; // Persiana bajando
-volatile int modo = 0; // Modo manual(0) automático(1)
-volatile int cmodo = 0; // Entero que nos indicará si el usuario ha pulsado 1 o más veces el botón*/
-////////////////////////////////////////////////////////////////////////////////
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -75,20 +65,127 @@ static void MX_TIM8_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define pasosporrev 4096 // para el motor
+//////////////DEFINES///////////////////////////////////////////////////////////////////////
 
-volatile int button_1 = 0; // bandera para interrupcion
+//////////////Para mostrar el estado////////////
+#define ESTADO0_PORT GPIOD
+#define ESTADO0_PIN GPIO_PIN_12
+
+#define ESTADO1_PORT GPIOD
+#define ESTADO1_PIN GPIO_PIN_13
+
+#define ESTADO2_PORT GPIOD
+#define ESTADO2_PIN GPIO_PIN_14
+///////////////////////////////////////////////
+
+
+/////////////// Para el motor //////////////////
+
+#define pasosporrev 4096
+
+#define M1_PORT GPIOD
+#define M1_PIN GPIO_PIN_8
+
+#define M2_PORT GPIOD
+#define M2_PIN GPIO_PIN_9
+
+#define M3_PORT GPIOD
+#define M3_PIN GPIO_PIN_10
+
+#define M4_PORT GPIOD
+#define M4_PIN GPIO_PIN_11
+///////////////////////////////////////////////
+
+//////////////////Para el hall////////////////
+#define VAL_LIM_HALL 450
+// para mayor sensibilidad aumentar valor; para menor, disminuir
+//////////////////////////////////////////////
+
+////////////////// Para ultrasonidos //////////
+#define DIST_MIN 3
+#define DIST_MAX_1 12
+#define DIST_MAX_2 24
+
+#define US_TRIGGER_PORT GPIOD
+#define US_TRIGGER_PIN GPIO_PIN_15
+
+#define US_ECHO_PORT GPIOD
+#define US_ECHO_PIN GPIO_PIN_4
+//////////////////////////////////////////////
+
+////////Para LDR//////////////////////////////
+#define UMBRAL_MODO_1 1000
+#define UMBRAL_MODO_2 800
+/////////////////////////////////////////////
+
+//////////////// Para movimiento /////////////
+#define MOTION_PORT GPIOD
+#define MOTION_PIN GPIO_PIN_3
+
+#define MOTION_LED_PORT GPIOD
+#define MOTION_LED_PIN GPIO_PIN_0
+/////////////////////////////////////////////
+
+//////////////////Para el PAD///////////////
+#define PAD_S1_PORT GPIOD
+#define PAD_S1_PIN GPIO_PIN_5
+
+#define PAD_S2_PORT GPIOD
+#define PAD_S2_PIN GPIO_PIN_6
+
+#define PAD_S3_PORT GPIOD
+#define PAD_S3_PIN GPIO_PIN_7
+
+#define PAD_E1_PORT GPIOA
+#define PAD_E1_PIN GPIO_PIN_9
+
+#define PAD_E2_PORT GPIOA
+#define PAD_E2_PIN GPIO_PIN_10
+
+#define PAD_E3_PORT GPIOA
+#define PAD_E3_PIN GPIO_PIN_15
+////////////////////////////////////////////
+
+//////////Para la CONTRASEÑA///////////////
+#define P1 '1'
+#define P2 '5'
+#define P3 '2'
+#define P4 '1'
+
+#define PAD_LED_V_PORT GPIOE
+#define PAD_LED_V_PIN GPIO_PIN_7
+
+#define PAD_LED_R_PORT GPIOB
+#define PAD_LED_R_PIN GPIO_PIN_2
+//////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////VARIABLES//////////////////////////////////////////////////////////
+
+//variables para los botones
+volatile int button_1 = 0;
 volatile int button_2 = 0;
 
+//vector para guardar las lecturas del ADC
 uint32_t ADC_val[3];
+
+//variable para guardar la distancia medida, en cm
 uint32_t distancia = 0;
 
-char aux; //char borrar;
+//variables para la contraseña
+char aux;
 char key [4] = {0,0,0,0};
 
+//variables para los estados
 uint8_t estado = 0;
 uint8_t preestado = 0;
 
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//////////////INTERRUPCIONES/////////////////////////////////////////////////////////////////
+// Dos botones
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	if (GPIO_Pin == GPIO_PIN_1) {
@@ -99,8 +196,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		button_2 = 1;
 	}
 }
+/////////////////////////////////////////////////////////////////////////////////////////////
 
 
+/////////////ANTIRREBOTES///////////////////////////////////////////////////////////////////
+// SEgún se realizó en el laboratorio
 int debouncer(volatile int* button_int, GPIO_TypeDef* GPIO_port, uint16_t GPIO_number){
 	static uint8_t button_count=0;
 	static int counter=0;
@@ -127,7 +227,11 @@ int debouncer(volatile int* button_int, GPIO_TypeDef* GPIO_port, uint16_t GPIO_n
 	}
 	return 0;
 }
+/////////////////////////////////////////////////////////////////////////////////////////////
 
+////////JOYSTICK////////////////////////////////////////////////////////////////////////////
+// Una funcion para saber si esta hacia arriba y otra hacia abajo, segun el valor leido en
+// el ADC.
 int joystick_arriba () {
 	HAL_ADC_Start(&hadc1);
 	if(HAL_ADC_PollForConversion(&hadc1, 100) ==  HAL_OK) {
@@ -147,70 +251,82 @@ int joystick_abajo () {
 	if(ADC_val[0] > 675) {return 1;}
 	else {return 0;}
 }
+////////////////////////////////////////////////////////////////////////////////////////////
 
+////////DELAY EN MICROSEGUNDOS/////////////////////////////////////////////////////////////
 void delay_us (uint16_t us) {
 	__HAL_TIM_SET_COUNTER(&htim3, 0);
 	while(__HAL_TIM_GET_COUNTER(&htim3)<us);
 }
+//////////////////////////////////////////////////////////////////////////////////////////
 
-void step_motor_set_rpm(int rpm) // max 13, min 1
+////////MOTOR PASO A PASO/////////////////////////////////////////////////////////////////
+//Funcion para determinar las rpm a las que gira el motor. Funciona bien entre 1 y 13.
+//Nosotros lo usaremos a 10 rpm en todos los casos.
+void step_motor_set_rpm(int rpm)
 {
 	delay_us(60000000/pasosporrev/rpm);
 }
 
+//Determina la secuencia de los pines a nivel alto/bajo para poder mover el motor.
+//Se van activando en orden. El primero se pone a nivel alto, se le añade el segundo,
+//se elimina el primero, se añade el tercero, se elimina el segundo, etc.
 void step_motor_half (int step) {
 	switch(step) {
 	case 0:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_RESET);
 		break;
 	case 1:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_RESET);
 		break;
 	case 2:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_RESET);
 		break;
 	case 3:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_RESET);
 		break;
 	case 4:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_RESET);
 		break;
 	case 5:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_SET);
 		break;
 	case 6:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_SET);
 		break;
 	case 7:
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M1_PORT, M1_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(M2_PORT, M2_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M3_PORT, M3_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(M4_PORT, M4_PIN, GPIO_PIN_SET);
 		break;
 	}
 }
 
+// Finalmente, la funcion que realmente usamos en el main, ya que incluye las dos
+// anteriores. Esta funcion hace que el motor gire un angulo introducido, en un
+// sentido u otro, y a unas rpm determinadas (entre 1 y 13 rpm funciona).
 void step_motor_angle (float angle, int direction, int rpm) {
 	float angperseq = 0.703125;
 	int numberofseq = (int) (angle/angperseq);
@@ -230,30 +346,48 @@ void step_motor_angle (float angle, int direction, int rpm) {
 		}
 	}
 }
+////////////////////////////////////////////////////////////////////////////////////////////////
 
+///////SENSOR DE EFECTO HALL///////////////////////////////////////////////////////////////////
+//Se lee como ADC para poder ajustar la sensibilidad a la deseada, segun
+//la disposicion fisica final de la maqueta. Es el sensor de fin de carrera
+//superior
 int hall () {
 	HAL_ADC_Start(&hadc2);
 	if(HAL_ADC_PollForConversion(&hadc2, 100) ==  HAL_OK) {
 		ADC_val[1] = HAL_ADC_GetValue(&hadc2);
 	}
 	HAL_ADC_Stop(&hadc2);
-	if(ADC_val[1] < 510) {return 1;}
+	if(ADC_val[1] < VAL_LIM_HALL) {return 1;}
 	else {return 0;}
 }
+////////////////////////////////////////////////////////////////////////////////////////////////
 
+////////SENSOR DE ULTRASONIDOS/////////////////////////////////////////////////////////////////
+//Lee la distancia que hay de un lado a otro en la parte de abajo, donde
+//deberia bajar la persiana. Es utilizado como sensor de fin de carrera
+//inferior y tambien como elemento de seguridad, pues si se detecta la
+//presencia de un obstaculo, no se baja la persiana.
+//
+//Se envia una señal a nivel alto de 10 microsegundos. Se espera un tiempo
+//durante el cual el sensor emite ultrasonidos y finalmente se lee durante
+//cuantos microsegundos la señal que devuelve el sensor se mantiene a
+//nivel alto.
 uint32_t ultrasonicRead (void) {
 	int cuenta = 0;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
+	HAL_GPIO_WritePin(US_TRIGGER_PORT, US_TRIGGER_PIN, 1);
 	delay_us(10);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
-	while(!(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_4)));
-	while(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_4)) {
+	HAL_GPIO_WritePin(US_TRIGGER_PORT, US_TRIGGER_PIN, 0);
+	while(!(HAL_GPIO_ReadPin(US_ECHO_PORT, US_ECHO_PIN)));
+	while(HAL_GPIO_ReadPin(US_ECHO_PORT, US_ECHO_PIN)) {
 		cuenta = cuenta + 1;
 		delay_us(1);
 	}
 	return cuenta * 0.051;
 }
+///////////////////////////////////////////////////////////////////////////////////////////////
 
+///////LDR////////////////////////////////////////////////////////////////////////////////////
 uint32_t ldr () {
 	HAL_ADC_Start(&hadc3);
 	if(HAL_ADC_PollForConversion(&hadc3, 100) ==  HAL_OK) {
@@ -262,100 +396,120 @@ uint32_t ldr () {
 	HAL_ADC_Stop(&hadc3);
 	return ADC_val[2];
 }
+//////////////////////////////////////////////////////////////////////////////////////////////
 
+////SENSOR DE MOVIMIENTO/////////////////////////////////////////////////////////////////////
+//Cuando el sensor detecta movimiento, su salida se pone a nivel alto durante un tiempo
+//determinado por la posicion de un potenciometro. Otro potenciometro determina la
+//sensibilidad.
+//En esta funcion simplemente se traduce el estado de esa salida del sensor a un LED
 void motion () {
-	 if(HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3)) {  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, 1); }
-	 else {  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, 0); }
+	 if(HAL_GPIO_ReadPin(MOTION_PORT, MOTION_PIN)) {  HAL_GPIO_WritePin(MOTION_LED_PORT, MOTION_LED_PIN, 1); }
+	 else {  HAL_GPIO_WritePin(MOTION_LED_PORT, MOTION_LED_PIN, 0); }
 }
+//////////////////////////////////////////////////////////////////////////////////////////////
 
+/////PANEL DE CONTRASEÑA/////////////////////////////////////////////////////////////////////
+//Su funcionamiento es el siguiente: el panel es una matriz. Las columnas se van poniendo
+//a nivel alto una a la vez y, en cada caso, se lee si alguna de las filas se pone a
+//nivel alto. En caso afirmativo, se ha producido el contacto entre la columna y la fila
+//correspondiente.
 char keypad (void)
 {
-	/* Make ROW 1 LOW and all other ROWs HIGH */
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_SET);  //Pull the R1 low
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);  // Pull the R2 High
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);  // Pull the R3 High
-	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
+	//LED rojo se enciende mientras estemos permitiendo la introduccion de contraseña
+	HAL_GPIO_WritePin(PAD_LED_R_PORT, PAD_LED_R_PIN, 1);
+	// Ponemos solo la primera columna a nivel alto
+	HAL_GPIO_WritePin (PAD_S1_PORT, PAD_S1_PIN, GPIO_PIN_SET);
+	HAL_GPIO_WritePin (PAD_S2_PORT, PAD_S2_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin (PAD_S3_PORT, PAD_S3_PIN, GPIO_PIN_RESET);
 
-	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+	if ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)))
 	{
-		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+		while ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)));
 		return '1';
 	}
 
-	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+	if ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)))
 	{
-		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+		while ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)));
 		return '2';
 	}
 
-	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+	if ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)))
 	{
-		while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+		while ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)));
 		return '3';
 	}
 
-	/* Make ROW 2 LOW and all other ROWs HIGH */
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_RESET);  //Pull the R1 low
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_SET);  // Pull the R2 High
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);  // Pull the R3 High
-	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
+	// Ahora la segunda
+	HAL_GPIO_WritePin (PAD_S1_PORT, PAD_S1_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin (PAD_S2_PORT, PAD_S2_PIN, GPIO_PIN_SET);
+	HAL_GPIO_WritePin (PAD_S3_PORT, PAD_S3_PIN, GPIO_PIN_RESET);
 
-	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+	if ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)))
 		{
-			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+			while ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)));
 			return '4';
 		}
 
-		if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+		if ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)))
 		{
-			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+			while ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)));
 			return '5';
 		}
 
-		if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+		if ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)))
 		{
-			while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+			while ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)));
 			return '6';
 		}
 
-	/*if (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)))   // if the Col 4 is low
-	{
-		while (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)));   // wait till the button is pressed
-		return 'B';
-	}*/
+	// La tercera
+	HAL_GPIO_WritePin (PAD_S1_PORT, PAD_S1_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin (PAD_S2_PORT, PAD_S2_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin (PAD_S3_PORT, PAD_S3_PIN, GPIO_PIN_SET);
 
-
-	/* Make ROW 3 LOW and all other ROWs HIGH */
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_5, GPIO_PIN_RESET);  //Pull the R1 low
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);  // Pull the R2 High
-	HAL_GPIO_WritePin (GPIOD, GPIO_PIN_7, GPIO_PIN_SET);  // Pull the R3 High
-	//HAL_GPIO_WritePin (R4_PORT, R4_PIN, GPIO_PIN_SET);  // Pull the R4 High
-
-	if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)))   // if the Col 1 is low
+	if ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)))
 			{
-				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_9)));   // wait till the button is pressed
+				while ((HAL_GPIO_ReadPin (PAD_E1_PORT, PAD_E1_PIN)));
 				return '7';
 			}
 
-			if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)))   // if the Col 2 is low
+			if ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)))
 			{
-				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_10)));   // wait till the button is pressed
+				while ((HAL_GPIO_ReadPin (PAD_E2_PORT, PAD_E2_PIN)));
 				return '8';
 			}
 
-			if ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)))   // if the Col 3 is low
+			if ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)))
 			{
-				while ((HAL_GPIO_ReadPin (GPIOA, GPIO_PIN_15)));   // wait till the button is pressed
+				while ((HAL_GPIO_ReadPin (PAD_E3_PORT, PAD_E3_PIN)));
 				return '9';
 			}
-
-	/*if (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)))   // if the Col 4 is low
-	{
-		while (!(HAL_GPIO_ReadPin (C4_PORT, C4_PIN)));   // wait till the button is pressed
-		return 'C';
-	}*/
 	return 'x';
 }
+
+//Esta funcion comprueba si se introduce la contraseña correcta
+//sin sobrepasar el tiempo limite. El motivo de este diseño
+//es que a veces se detectan numeros aleatorios por contactos
+//indeseados, suponemos que por la baja calidad del panel.
+void password () {
+	if (aux == P1) { key[0] = aux; }
+	if (aux == P2 && key[0] == P1) { key[1] = aux; }
+	if (aux == P3 && key[1] == P2) { key[2] = aux; }
+	if (aux == P4 && key[2] == P3) {
+		key[3] = aux;
+		HAL_GPIO_WritePin(PAD_LED_V_PORT, PAD_LED_V_PIN, 1);
+		__HAL_TIM_SET_COUNTER(&htim8, 0);
+	}
+	if(__HAL_TIM_GET_COUNTER(&htim8)>=8000) {
+		estado = preestado;
+		HAL_GPIO_WritePin(PAD_LED_R_PORT, PAD_LED_R_PIN, 0);
+		HAL_GPIO_WritePin(PAD_LED_V_PORT, PAD_LED_V_PIN, 0);
+		key[0] = 0; key[1] = 0; key[2] = 0; key[3] = 0;
+	}
+}
+//////////////////////////////////////////////////////////////////////////////////////////
 
 
 /* USER CODE END 0 */
@@ -419,128 +573,119 @@ HAL_TIM_Base_Start(&htim8);
 	  	  }
 
 
-	  motion();
+	  motion(); //sensor de movimiento + led correspondiente gestionado aqui
 
+	  //switch case para los estados
 	  switch(estado) {
 	  	  case 0: // modo manual
-	  		  //mostramos el estado en el que estamos
-		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 1);
-		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
-		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
-		  	  //
-		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
+	  		  //mostramos el estado en el que estamos en primer lugar
+	  		  HAL_GPIO_WritePin(ESTADO0_PORT, ESTADO0_PIN, 1);
+	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
+		  	  //leemos la distancia:
+	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
+			  	  	  	  	  	  	  	  	  	  //está en las características del
+			  	  	  	  	  	  	  	  	  	  //sensor
 			  }
-		  else {
-			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
-			  distancia = ultrasonicRead(); // ahora si, leemos distancia
-		  }
-
-		  if(distancia > 3 && distancia < 11) {
-			  //obstaculo
-		  }
-		  else if (distancia == 3){
-			  //solo se permite subir
-			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
-		  }
-		  else if (distancia == 11) {
-			  // funcionamiento normal
-			  if (hall()) {if(joystick_abajo()) { step_motor_angle(1,0,5); }}
-			 		  else {
+	  		  else {
+	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  		  }
+		  	  //permitimos el movimiento del motor segun la situacion:
+	  		  if(distancia > DIST_MIN && distancia < DIST_MAX_1) {
+			  //obstaculo o persiana abajo. Solamente permitimos la subida.
+	  			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
+	  		  }
+	  		  else if (distancia >= DIST_MAX_1 && distancia <= DIST_MAX_2) {
+			  // funcionamiento normal, permitimos subida (solo si el hall lo permite) y bajada.
+	  			  if (hall()) {if(joystick_abajo()) { step_motor_angle(1,0,5); }}
+	  			  else {
 			 			  if(joystick_arriba()) { step_motor_angle(1,1,5); }
 			 			  if(joystick_abajo()) { step_motor_angle(1,0,5); }
-			 		  }
-		  }
-		  break;
+	  			  }
+	  		  }
+	  		  break;
 
 
 	  	  case 1: // modo automatico 1: "invierno / intimidad"
 	  		  // mostramos el estado en el que estamos
-	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
-	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 1);
-	 	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+	  		  HAL_GPIO_WritePin(ESTADO0_PORT, ESTADO0_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 1);
+	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
 
-	 	  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
-	 	  }
-	 	  else {
-	 		  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
-	 		  distancia = ultrasonicRead(); // ahora si, leemos distancia
-	 	  }
-
-	 	  if (ldr()>1000 && distancia > 3) {
-	 		 if(distancia > 3 && distancia < 11) {
-	 			 //obstaculo
-	 		 }
-	 		 else {
-	 			 step_motor_angle(1,0,5); //bajando
-	 		 }
-	 	  }
-	 	  else if (ldr()<1000 && hall()==0) {
-	 			 step_motor_angle(1,1,5); //subiendo
-	 	  }
-	 	  break;
+	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
+  	  	  	  	  	  	  	  	  	  	  	  	  //está en las características del
+  	  	  	  	  	  	  	  	  	  	  	  	  //sensor
+	  		  }
+	  		  else {
+	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  		  }
+	 	  	  //Según el valor del LDR actuamos de una u otra forma.
+	  		  if (ldr()>UMBRAL_MODO_1 && distancia > DIST_MIN) {
+	  			  if(distancia > DIST_MIN && distancia < DIST_MAX_1) {
+	 			 //obstaculo o persiana abajo
+	  			  }
+	  			  else {
+	  				  step_motor_angle(1,0,5); //bajando
+	  			  }
+	  		  }
+	  		  else if (ldr()<UMBRAL_MODO_1 && hall()==0) {
+	  			  step_motor_angle(1,1,5); //subiendo mientras hall lo permita
+	  		  }
+	  		  break;
 
 
 
 	  	  case 2:  // modo automatico 2: "verano / inverso"
 	  		  // mostramos el estado en el que estamos
-	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
-	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
-	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 1);
+	  		  HAL_GPIO_WritePin(ESTADO0_PORT, ESTADO0_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 1);
+	      	  //leemos la distancia
+	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
+ 	  	  	  	  	  	  	  	  	  	  	  	 //está en las características del
+	 		 	 	 	 	 	 	 	 	 	 //sensor
+	  		  }
+	  		  else {
+	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
+	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  		  }
+	 	 	 //segun el valor del ldr, actuamos de una u otra forma.
+	  		  if (ldr()<UMBRAL_MODO_2 && distancia > DIST_MIN) {
+	  			  if(distancia > DIST_MIN && distancia < DIST_MAX_1) {
+	 			 //obstaculo o persiana abajo
+	  			  }
+	  			  else {
+	  				  step_motor_angle(1,0,5); // bajando
+	  			  }
+	  		  }
+	  		  else if (ldr()>UMBRAL_MODO_2 && hall()==0) {
+	  			  step_motor_angle(1,1,5); // subiendo mientras el hall lo permita
+	  		  }
+	  		  break;
 
-	 	 if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia
-	 	 }
-	 	 else {
-	 		 __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
-	 		 distancia = ultrasonicRead(); // ahora si, leemos distancia
-	 	 }
-
-	 	 if (ldr()<800 && distancia > 3) {
-	 		 if(distancia > 3 && distancia < 11) {
-	 			 //obstaculo
-	 		 }
-	 		 else {
-	 			 step_motor_angle(1,0,5); // bajando
-	 		 }
-	 	 }
-	 	 else if (ldr()>800 && hall()==0) {
-	 		 			 step_motor_angle(1,1,5); // subiendo
-	 	 }
-	 	 break;
 
 
 
-
-	  	  case 3: // caja fuerte?
-	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
-	  	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
-	      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
-
-	      aux = keypad();
-	      	  	  	  	  // if (aux != 'x') { borrar = aux; }
-	      if (aux == '1') { key[0] = aux; }
-	      if (aux == '5' && key[0] == '1') { key[1] = aux; }
-	      if (aux == '2' && key[1] == '5') { key[2] = aux; }
-	      if (aux == '1' && key[2] == '2') {
-	    	  key[3] = aux;
-	    	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
-	    	  __HAL_TIM_SET_COUNTER(&htim8, 0);
-	      }
-
-	      if(__HAL_TIM_GET_COUNTER(&htim8)>=8000) {
-	    		  estado = preestado;
-	    		  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
-	    		  key[0] = 0; key[1] = 0; key[2] = 0; key[3] = 0;
-	      }
-
-	  	  break;
+	  	  case 3: // caja fuerte, contraseña
+	  		  //apagamos los estados 0, 1 , 2
+	  		  //el estado actual se muestra con otro led,
+	  		  //gestionado en las funciones keypad() y password()
+	  		  HAL_GPIO_WritePin(ESTADO0_PORT, ESTADO0_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
+	  		  aux = keypad(); //Se lee si se pulsa algun boton
+	  		  password(); // Se comprueba si se van introduciendo
+		  	  	  	  // los numeros correctos. Se enciende un LED
+		  	  	  	  // verde en caso de éxito.
+	  		  break;
 
 	  	  default:
-	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
-	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
-	  		 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+	  		  HAL_GPIO_WritePin(ESTADO0_PORT, ESTADO0_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
+	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
 	      break;
-
-
 	  }
   }
   /* USER CODE END 3 */
@@ -844,12 +989,34 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
                           |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
                           |GPIO_PIN_0|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PB2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PE7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD8 PD9 PD10 PD11
                            PD12 PD13 PD14 PD15
