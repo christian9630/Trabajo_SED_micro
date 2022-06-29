@@ -44,7 +44,8 @@ ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 
 TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim8;
+TIM_HandleTypeDef htim9;
+TIM_HandleTypeDef htim12;
 
 /* USER CODE BEGIN PV */
 
@@ -57,7 +58,8 @@ static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_TIM8_Init(void);
+static void MX_TIM12_Init(void);
+static void MX_TIM9_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -163,9 +165,11 @@ static void MX_TIM8_Init(void);
 
 ////////////////////////////VARIABLES//////////////////////////////////////////////////////////
 
-//variables para los botones
+//banderas para los botones y temporizaciones
 volatile int button_1 = 0;
 volatile int button_2 = 0;
+volatile int tiempo1 = 0;
+volatile int tiempo2 = 0;
 
 //vector para guardar las lecturas del ADC
 uint32_t ADC_val[3];
@@ -194,6 +198,19 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 	if(GPIO_Pin ==  GPIO_PIN_2) {
 		button_2 = 1;
+	}
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+
+	if (htim == &htim9)
+	{
+		tiempo2 = 1;
+	}
+
+	if (htim == &htim12)
+	{
+		tiempo1 = 1;
 	}
 }
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -500,9 +517,11 @@ void password () {
 	if (aux == P4 && key[2] == P3) {
 		key[3] = aux;
 		HAL_GPIO_WritePin(PAD_LED_V_PORT, PAD_LED_V_PIN, 1);
-		__HAL_TIM_SET_COUNTER(&htim8, 0);
+		tiempo2 = 0;
+		__HAL_TIM_SET_COUNTER(&htim9, 0);
+
 	}
-	if(__HAL_TIM_GET_COUNTER(&htim8)>=8000) {
+	if(tiempo2) {
 		estado = preestado;
 		HAL_GPIO_WritePin(PAD_LED_R_PORT, PAD_LED_R_PIN, 0);
 		HAL_GPIO_WritePin(PAD_LED_V_PORT, PAD_LED_V_PIN, 0);
@@ -546,10 +565,12 @@ int main(void)
   MX_ADC2_Init();
   MX_ADC3_Init();
   MX_TIM3_Init();
-  MX_TIM8_Init();
+  MX_TIM12_Init();
+  MX_TIM9_Init();
   /* USER CODE BEGIN 2 */
 HAL_TIM_Base_Start(&htim3);
-HAL_TIM_Base_Start(&htim8);
+HAL_TIM_Base_Start_IT(&htim9);
+HAL_TIM_Base_Start_IT(&htim12);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -560,15 +581,21 @@ HAL_TIM_Base_Start(&htim8);
 
     /* USER CODE BEGIN 3 */
 	  if(debouncer(&button_1, GPIOD, GPIO_PIN_1) == 1) {
-		  estado ++;
-		  if (estado >= 3) {estado = 0;}
-		  button_1 = 0;
+		  if(estado == 3) {
+			  // Nada
+		  }
+		  else {
+			  estado ++;
+			  if (estado >= 3) {estado = 0;}
+			  	  button_1 = 0;
+		  	  }
 	  }
 
 	  if(debouncer(&button_2, GPIOD, GPIO_PIN_2) == 1) {
 		  	  preestado = estado;
 		  	  estado = 3;
-		  	  __HAL_TIM_SET_COUNTER(&htim8, 0);
+		  	 tiempo2 = 0;
+		  	__HAL_TIM_SET_COUNTER(&htim9, 0);
 	  		  button_2 = 0;
 	  	  }
 
@@ -583,13 +610,13 @@ HAL_TIM_Base_Start(&htim8);
 	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
 	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
 		  	  //leemos la distancia:
-	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
-			  	  	  	  	  	  	  	  	  	  //está en las características del
-			  	  	  	  	  	  	  	  	  	  //sensor
+	  		  if(tiempo1 == 0) {  //no leemos distancia: el por qué
+			  	  	  		//está en las características del
+			  	  	  	  	//sensor
 			  }
 	  		  else {
-	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
 	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  			  tiempo1 = 0;
 	  		  }
 		  	  //permitimos el movimiento del motor segun la situacion:
 	  		  if(distancia > DIST_MIN && distancia < DIST_MAX_1) {
@@ -613,13 +640,13 @@ HAL_TIM_Base_Start(&htim8);
 	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 1);
 	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 0);
 
-	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
-  	  	  	  	  	  	  	  	  	  	  	  	  //está en las características del
-  	  	  	  	  	  	  	  	  	  	  	  	  //sensor
+	  		  if(tiempo1 == 0) { //no leemos distancia: el por qué
+  	  	  	  	  	  	  //está en las características del
+  	  	  	  	  	  	  //sensor
 	  		  }
 	  		  else {
-	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
 	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  			  tiempo1 = 0;
 	  		  }
 	 	  	  //Según el valor del LDR actuamos de una u otra forma.
 	  		  if (ldr()>UMBRAL_MODO_1 && distancia > DIST_MIN) {
@@ -643,13 +670,13 @@ HAL_TIM_Base_Start(&htim8);
 	  		  HAL_GPIO_WritePin(ESTADO1_PORT, ESTADO1_PIN, 0);
 	  		  HAL_GPIO_WritePin(ESTADO2_PORT, ESTADO2_PIN, 1);
 	      	  //leemos la distancia
-	  		  if(__HAL_TIM_GET_COUNTER(&htim8)<100) { //no leemos distancia: el por qué
- 	  	  	  	  	  	  	  	  	  	  	  	 //está en las características del
-	 		 	 	 	 	 	 	 	 	 	 //sensor
+	  		  if(tiempo1 == 0) { //no leemos distancia: el por qué
+ 	  	  	  	  	  	  //está en las características del
+	 		 	 	 	  //sensor
 	  		  }
 	  		  else {
-	  			  __HAL_TIM_SET_COUNTER(&htim8, 0); //ponemos a cero el temporizador
 	  			  distancia = ultrasonicRead(); // ahora si, leemos distancia
+	  			  tiempo1 = 0;
 	  		  }
 	 	 	 //segun el valor del ldr, actuamos de una u otra forma.
 	  		  if (ldr()<UMBRAL_MODO_2 && distancia > DIST_MIN) {
@@ -931,48 +958,78 @@ static void MX_TIM3_Init(void)
 }
 
 /**
-  * @brief TIM8 Initialization Function
+  * @brief TIM9 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM8_Init(void)
+static void MX_TIM9_Init(void)
 {
 
-  /* USER CODE BEGIN TIM8_Init 0 */
+  /* USER CODE BEGIN TIM9_Init 0 */
 
-  /* USER CODE END TIM8_Init 0 */
+  /* USER CODE END TIM9_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN TIM8_Init 1 */
+  /* USER CODE BEGIN TIM9_Init 1 */
 
-  /* USER CODE END TIM8_Init 1 */
-  htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 40000-1;
-  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 0xffff-1;
-  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim8.Init.RepetitionCounter = 0;
-  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  /* USER CODE END TIM9_Init 1 */
+  htim9.Instance = TIM9;
+  htim9.Init.Prescaler = 40000-1;
+  htim9.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim9.Init.Period = 8000-1;
+  htim9.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim9.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim9) != HAL_OK)
   {
     Error_Handler();
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
+  if (HAL_TIM_ConfigClockSource(&htim9, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM8_Init 2 */
+  /* USER CODE BEGIN TIM9_Init 2 */
 
-  /* USER CODE END TIM8_Init 2 */
+  /* USER CODE END TIM9_Init 2 */
+
+}
+
+/**
+  * @brief TIM12 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM12_Init(void)
+{
+
+  /* USER CODE BEGIN TIM12_Init 0 */
+
+  /* USER CODE END TIM12_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+
+  /* USER CODE BEGIN TIM12_Init 1 */
+
+  /* USER CODE END TIM12_Init 1 */
+  htim12.Instance = TIM12;
+  htim12.Init.Prescaler = 40000-1;
+  htim12.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim12.Init.Period = 100-1;
+  htim12.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim12.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim12) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim12, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM12_Init 2 */
+
+  /* USER CODE END TIM12_Init 2 */
 
 }
 
